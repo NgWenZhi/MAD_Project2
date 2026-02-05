@@ -18,7 +18,7 @@ class _RegisterPageState extends State<RegisterPage> {
   bool showPassword = false;
   String errorMsg = "";
 
-  void register() {
+  Future<void> register() async {
     String name = nameCtrl.text.trim();
     String email = emailCtrl.text.trim();
     String phone = phoneCtrl.text.trim();
@@ -44,12 +44,13 @@ class _RegisterPageState extends State<RegisterPage> {
       return;
     }
 
-    if (UserDataService.emailExists(email)) {
+    if (await UserDataService.emailExists(email)) {
       setState(() => errorMsg = "Email already registered");
       return;
     }
 
-    UserDataService.registerPatient(
+    try {
+      await UserDataService.registerPatient(
       AppUser(
         name: name,
         email: email,
@@ -58,6 +59,10 @@ class _RegisterPageState extends State<RegisterPage> {
         role: "patient",
       ),
     );
+    } catch (_) {
+      setState(() => errorMsg = "Unable to register account");
+      return;
+    }
 
     nameCtrl.clear();
     emailCtrl.clear();

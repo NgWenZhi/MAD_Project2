@@ -17,11 +17,16 @@ class _LoginPageState extends State<LoginPage> {
   bool showPassword = false;
   String errorMsg = "";
 
-  void login() {
-    AppUser? user = UserDataService.loginPatient(
-      emailCtrl.text.trim(),
-      passCtrl.text,
-    );
+  Future<void> login() async {
+    AppUser? user;
+    try {
+      user = await UserDataService.loginPatient(
+        emailCtrl.text.trim(),
+        passCtrl.text,
+      );
+    } catch (_) {
+      user = null;
+    }
 
     if (user == null) {
       setState(() {

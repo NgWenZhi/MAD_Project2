@@ -1,118 +1,132 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'user.dart';
 
-
 class UserDataService {
-  static List<AppUser> patients = [
-    AppUser(
-      name: "Test Patient",
-      email: "test@example.com",
-      password: "123456",
-      role: "patient",
-      phone: "91511886",
-      dob: "19-02-2007",
-      emergencyContact: "",
-      allergies: ["Peanuts","Peppers","Chocolate","Strawberries"],
-      surgeries: ['Sinus surgery']
-    ),
-    AppUser(
-      name: "Amelie Tan",
-      email: "tan@example.com",
-      password: "123123",
-      role: "patient",
-      phone: "",
-      dob: "",
-      emergencyContact: "",
-      allergies: ["Cats","Dogs"],
-      surgeries: ['Breast biopsy'],
-      conditions: ["Ezcyma"]
-    ),
-  ];
+  static final FirebaseAuth _auth = FirebaseAuth.instance;
+  static final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  static List<AppUser> doctors = [
-    AppUser(
-      name: "Dr. Neo",
-      doctorId: "D001",
-      password: "123456",
-      role: "doctor",
-    ),
-    AppUser(
-      name: "Dr. Smith",
-      doctorId: "D002",
-      password: "234567",
-      role: "doctor",
-    ),
-    AppUser(
-      name: "Dr. Gun",
-      doctorId: "D003",
-      password: "345678",
-      role: "doctor",
-    ),
-  ];
+  static CollectionReference<Map<String, dynamic>> get _users =>
+      _db.collection('users');
 
-  // ---------- LOGIN ----------
+  static Future<AppUser?> loginPatient(String email, String password) async {
+    final credential = await _auth.signInWithEmailAndPassword(
+      email: email,
+      password: password,
+    );
 
-  static AppUser? loginPatient(String email, String password) {
-    for (var u in patients) {
-      if (u.email == email && u.password == password) {
-        return u;
-      }
+    final uid = credential.user?.uid;
+    if (uid == null) return null;
+
+    final doc = await _users.doc(uid).get();
+    final data = doc.data();
+    if (data == null || data['role'] != 'patient') {
+      await _auth.signOut();
+      return null;
     }
-    return null;
+
+    return AppUser.fromMap(data, uid: uid);
   }
 
-  static AppUser? loginDoctor(String doctorId, String password) {
-    for (var d in doctors) {
-      if (d.doctorId == doctorId && d.password == password) {
-        return d;
-      }
+  static Future<AppUser?> loginDoctor(String doctorId, String password) async {
+    final query = await _users
+        .where('role', isEqualTo: 'doctor')
+        .where('doctorId', isEqualTo: doctorId)
+        .limit(1)
+        .get();
+
+    if (query.docs.isEmpty) return null;
+
+    final doctorData = query.docs.first.data();
+    final email = (doctorData['email'] ?? '').toString();
+    if (email.isEmpty) return null;
+
+    final credential = await _auth.signInWithEmailAndPassword(
+      email: email,
+      password: password,
+    );
+    final uid = credential.user?.uid;
+    if (uid == null) return null;
+
+    final doc = await _users.doc(uid).get();
+    final data = doc.data();
+    if (data == null || data['role'] != 'doctor') {
+      await _auth.signOut();
+      return null;
     }
-    return null;
+
+    return AppUser.fromMap(data, uid: uid);
   }
 
-  // ---------- PATIENT MANAGEMENT ----------
+  static Future<void> registerPatient(AppUser user) async {
+    final credential = await _auth.createUserWithEmailAndPassword(
+      email: user.email,
+      password: user.password,
+    );
 
-  static void registerPatient(AppUser user) {
-    patients.add(user);
+    final uid = credential.user!.uid;
+    await _users.doc(uid).set({
+      ...user.toMap(),
+      'uid': uid,
+      'role': 'patient',
+      'createdAt': FieldValue.serverTimestamp(),
+    });
   }
 
-  static void updatePatient(AppUser updatedUser) {
-    for (int i = 0; i < patients.length; i++) {
-      if (patients[i].email == updatedUser.email) {
-        patients[i] = updatedUser;
-        return;
-      }
-    }
+  static Future<void> updatePatient(AppUser updatedUser) async {
+    final uid = updatedUser.uid.isNotEmpty
+        ? updatedUser.uid
+        : _auth.currentUser?.uid;
+    if (uid == null || uid.isEmpty) return;
+
+    await _users.doc(uid).set({
+      ...updatedUser.toMap(),
+      'uid': uid,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
   }
 
-  static bool resetPatientPassword(String email, String newPassword) {
-    for (var user in patients) {
-      if (user.email == email) {
-        user.password = newPassword;
-        return true;
-      }
-    }
-    return false;
+  static Future<bool> resetPatientPassword(String email, String _) async {
+    await _auth.sendPasswordResetEmail(email: email);
+    return true;
   }
 
-  static bool emailExists(String email) {
-    for (var user in patients) {
-      if (user.email == email) {
-        return true;
-      }
-    }
-    return false;
+  static Future<bool> emailExists(String email) async {
+    final methods = await _auth.fetchSignInMethodsForEmail(email);
+    return methods.isNotEmpty;
   }
 
-  
+  static Future<List<AppUser>> get patients async {
+    final snapshot = await _users.where('role', isEqualTo: 'patient').get();
+    return snapshot.docs
+        .map((d) => AppUser.fromMap(d.data(), uid: d.id))
+        .toList();
+  }
 
-  // ---------- DOCTOR HELPERS ----------
+  static Future<List<AppUser>> get doctors async {
+    final snapshot = await _users.where('role', isEqualTo: 'doctor').get();
+    return snapshot.docs
+        .map((d) => AppUser.fromMap(d.data(), uid: d.id))
+        .toList();
+  }
 
-  static String getDoctorName(String doctorId) {
-    for (var d in doctors) {
-      if (d.doctorId == doctorId) {
-        return d.name;
-      }
-    }
-    return "Dr.";
+  static Future<String> getDoctorName(String doctorId) async {
+    final snapshot = await _users
+        .where('role', isEqualTo: 'doctor')
+        .where('doctorId', isEqualTo: doctorId)
+        .limit(1)
+        .get();
+
+    if (snapshot.docs.isEmpty) return 'Dr.';
+    return (snapshot.docs.first.data()['name'] ?? 'Dr.').toString();
+  }
+
+  static Future<AppUser?> getCurrentUserProfile() async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return null;
+    final doc = await _users.doc(uid).get();
+    final data = doc.data();
+    if (data == null) return null;
+    return AppUser.fromMap(data, uid: uid);
   }
 }
