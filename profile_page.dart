@@ -60,7 +60,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
     if (result != null && result.isNotEmpty) {
       setState(() => onSaved(result));
-      UserDataService.updatePatient(_user);
+      await UserDataService.updatePatient(_user);
     }
   }
 
@@ -167,7 +167,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     borderRadius: BorderRadius.circular(14),
                   ),
                 ),
-                onPressed: () {
+                onPressed: () async {
                   Navigator.pushNamedAndRemoveUntil(
                     context,
                     "/",

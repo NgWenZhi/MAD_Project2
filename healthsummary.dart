@@ -49,7 +49,7 @@ class _HealthSummaryPageState extends State<HealthSummaryPage> {
             child: const Text("Cancel"),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               setState(() {
                 list
                   ..clear()
@@ -61,7 +61,7 @@ class _HealthSummaryPageState extends State<HealthSummaryPage> {
                   );
               });
 
-              UserDataService.updatePatient(_user);
+              await UserDataService.updatePatient(_user);
               Navigator.pop(context);
             },
             child: const Text("Save"),
