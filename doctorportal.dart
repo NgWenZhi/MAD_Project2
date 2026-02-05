@@ -21,171 +21,138 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
 
   @override
   Widget build(BuildContext context) {
-    final doctorName =
-        UserDataService.getDoctorName(widget.doctorId);
-
     final now = DateTime.now();
+    return FutureBuilder(
+      future: Future.wait<dynamic>([
+        UserDataService.getDoctorName(widget.doctorId),
+        AppointmentsDataService.forDoctorOnDay(widget.doctorId, now),
+      ]),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Scaffold(body: Center(child: CircularProgressIndicator()));
+        }
 
-    final todaysAppointments =
-        AppointmentsDataService.forDoctorOnDay(
-          widget.doctorId,
-          now,
-        )..sort((a, b) => a.dateTime.compareTo(b.dateTime));
+        final data = snapshot.data as List<dynamic>;
+        final doctorName = data[0] as String;
+        final todaysAppointments = (data[1] as List<Appointment>)
+          ..sort((a, b) => a.dateTime.compareTo(b.dateTime));
 
-    final totalToday = todaysAppointments.length;
+        final totalToday = todaysAppointments.length;
+        final remaining = todaysAppointments.where((a) => a.dateTime.isAfter(now)).length;
+        final upcomingToday = todaysAppointments.where((a) => a.dateTime.isAfter(now)).take(5).toList();
 
-    final remaining = todaysAppointments
-        .where((a) => a.dateTime.isAfter(now))
-        .length;
-
-    final upcomingToday = todaysAppointments
-        .where((a) => a.dateTime.isAfter(now))
-        .take(5)
-        .toList();
-
-    return Scaffold(
-      backgroundColor: const Color.fromARGB(255, 247, 249, 252),
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black),
-          onPressed: () {
-            Navigator.pushNamedAndRemoveUntil(
-              context,
-              "/",
-              (route) => false,
-            );
-          },
-        ),
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                _formattedDate(),
-                style: TextStyle(
-                  color: Colors.grey.shade600,
-                  fontSize: 14,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                "Good Morning, $doctorName",
-                style: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-
-              const SizedBox(height: 20),
-
-              _summaryCard(totalToday, remaining),
-              const SizedBox(height: 16),
-
-              GestureDetector(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) =>
-                          PatientsPage(doctorId: widget.doctorId),
-                    ),
-                  );
-                },
-                child: _recordsCard(),
-              ),
-
-              const SizedBox(height: 24),
-
-              Row(
-                mainAxisAlignment:
-                    MainAxisAlignment.spaceBetween,
-                children: const [
+        return Scaffold(
+          backgroundColor: const Color.fromARGB(255, 247, 249, 252),
+          appBar: AppBar(
+            backgroundColor: Colors.white,
+            elevation: 0,
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back, color: Colors.black),
+              onPressed: () {
+                Navigator.pushNamedAndRemoveUntil(context, "/", (route) => false);
+              },
+            ),
+          ),
+          body: SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   Text(
-                    "TODAY'S TIMELINE",
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey,
-                    ),
+                    _formattedDate(),
+                    style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
                   ),
+                  const SizedBox(height: 4),
                   Text(
-                    "View all",
-                    style: TextStyle(color: Colors.blue),
+                    "Good Morning, $doctorName",
+                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                   ),
+                  const SizedBox(height: 20),
+                  _summaryCard(totalToday, remaining),
+                  const SizedBox(height: 16),
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => PatientsPage(doctorId: widget.doctorId),
+                        ),
+                      );
+                    },
+                    child: _recordsCard(),
+                  ),
+                  const SizedBox(height: 24),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: const [
+                      Text(
+                        "TODAY'S TIMELINE",
+                        style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey),
+                      ),
+                      Text("View all", style: TextStyle(color: Colors.blue)),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  if (upcomingToday.isEmpty)
+                    const Text("No more appointments today", style: TextStyle(color: Colors.grey)),
+                  ...upcomingToday.map((a) => _appointmentTile(
+                        name: a.patientName,
+                        time: TimeOfDay.fromDateTime(a.dateTime).format(context),
+                      )),
                 ],
               ),
+            ),
+          ),
+          bottomNavigationBar: BottomNavigationBar(
+            currentIndex: currentIndex,
+            selectedItemColor: const Color.fromARGB(255, 44, 56, 56),
+            unselectedItemColor: Colors.grey,
+            onTap: (index) {
+              setState(() => currentIndex = index);
 
-              const SizedBox(height: 12),
+              if (index == 1) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => PatientsPage(doctorId: widget.doctorId)),
+                );
+              }
 
-              if (upcomingToday.isEmpty)
-                const Text(
-                  "No more appointments today",
-                  style: TextStyle(color: Colors.grey),
-                ),
-
-              ...upcomingToday.map((a) => _appointmentTile(
-                    name: a.patientName,
-                    time: TimeOfDay.fromDateTime(a.dateTime)
-                        .format(context),
-                  )),
+              if (index == 2) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => DoctorAppointments(doctorId: widget.doctorId)),
+                );
+              }
+            },
+            items: const [
+              BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: "DASH"),
+              BottomNavigationBarItem(icon: Icon(Icons.people), label: "PATIENTS"),
+              BottomNavigationBarItem(icon: Icon(Icons.event), label: "APPOINTMENTS"),
             ],
           ),
-        ),
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: currentIndex,
-        selectedItemColor:
-            const Color.fromARGB(255, 44, 56, 56),
-        unselectedItemColor: Colors.grey,
-        onTap: (index) {
-          setState(() => currentIndex = index);
-
-          if (index == 1) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) =>
-                    PatientsPage(doctorId: widget.doctorId),
-              ),
-            );
-          }
-
-          if (index == 2) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) =>
-                    DoctorAppointments(doctorId: widget.doctorId),
-              ),
-            );
-          }
-        },
-        items: const [
-          BottomNavigationBarItem(
-              icon: Icon(Icons.dashboard), label: "DASH"),
-          BottomNavigationBarItem(
-              icon: Icon(Icons.people), label: "PATIENTS"),
-          BottomNavigationBarItem(
-              icon: Icon(Icons.event), label: "APPOINTMENTS"),
-        ],
-      ),
+        );
+      },
     );
   }
 
   String _formattedDate() {
     final now = DateTime.now();
     const months = [
-      "Jan","Feb","Mar","Apr","May","Jun",
-      "Jul","Aug","Sep","Oct","Nov","Dec"
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "May",
+      "Jun",
+      "Jul",
+      "Aug",
+      "Sep",
+      "Oct",
+      "Nov",
+      "Dec"
     ];
-    const days = [
-      "Monday","Tuesday","Wednesday",
-      "Thursday","Friday","Saturday","Sunday"
-    ];
+    const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
     return "${days[now.weekday - 1]}, ${months[now.month - 1]} ${now.day}";
   }
 
@@ -203,20 +170,9 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                "TOTAL TODAY",
-                style: TextStyle(color: Colors.grey, fontSize: 12),
-              ),
-              Text(
-                "$total Patients",
-                style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold),
-              ),
-              Text(
-                "$remaining remaining",
-                style: const TextStyle(color: Colors.grey),
-              ),
+              const Text("TOTAL TODAY", style: TextStyle(color: Colors.grey, fontSize: 12)),
+              Text("$total Patients", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              Text("$remaining remaining", style: const TextStyle(color: Colors.grey)),
             ],
           ),
         ],
@@ -239,14 +195,8 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  "Patient Records",
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                Text(
-                  "Search and view medical records",
-                  style: TextStyle(color: Colors.grey),
-                ),
+                Text("Patient Records", style: TextStyle(fontWeight: FontWeight.bold)),
+                Text("Search and view medical records", style: TextStyle(color: Colors.grey)),
               ],
             ),
           ),
@@ -256,32 +206,17 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
     );
   }
 
-  Widget _appointmentTile({
-    required String name,
-    required String time,
-  }) {
+  Widget _appointmentTile({required String name, required String time}) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-      ),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
       child: Row(
         children: [
-          const CircleAvatar(child: Icon(Icons.person)),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(name,
-                    style:
-                        const TextStyle(fontWeight: FontWeight.bold)),
-              ],
-            ),
-          ),
-          Text(time),
+          const Icon(Icons.access_time, color: Colors.blueGrey),
+          const SizedBox(width: 10),
+          Expanded(child: Text(name, style: const TextStyle(fontWeight: FontWeight.w600))),
+          Text(time, style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w600)),
         ],
       ),
     );

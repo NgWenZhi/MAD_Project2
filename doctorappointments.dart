@@ -14,11 +14,7 @@ class DoctorAppointments extends StatefulWidget {
 
 class _DoctorAppointmentsState extends State<DoctorAppointments> {
   DateTime selectedDate = DateTime.now();
-
-  /// 🔹 Slots patient CAN still book
   Set<String> availableSlots = {};
-
-  /// 🔹 Slots doctor currently selected (UI only)
   Set<String> selectedSlots = {};
 
   final Map<String, List<String>> slots = {
@@ -56,7 +52,6 @@ class _DoctorAppointmentsState extends State<DoctorAppointments> {
     ],
   };
 
-  /// Flatten all possible slots
   Set<String> get allSlots => slots.values.expand((e) => e).toSet();
 
   @override
@@ -65,12 +60,13 @@ class _DoctorAppointmentsState extends State<DoctorAppointments> {
     _loadAvailability(selectedDate);
   }
 
-  void _loadAvailability(DateTime date) {
-    final saved = SlotsDataService.getAvailability(widget.doctorId, date);
-
-    availableSlots = saved.isEmpty ? Set.from(allSlots) : Set.from(saved);
-
-    selectedSlots = {};
+  Future<void> _loadAvailability(DateTime date) async {
+    final saved = await SlotsDataService.getAvailability(widget.doctorId, date);
+    if (!mounted) return;
+    setState(() {
+      availableSlots = saved.isEmpty ? Set.from(allSlots) : Set.from(saved);
+      selectedSlots = {};
+    });
   }
 
   Widget slotButton(String time) {
@@ -81,9 +77,7 @@ class _DoctorAppointmentsState extends State<DoctorAppointments> {
       onTap: isAvailable
           ? () {
               setState(() {
-                isSelected
-                    ? selectedSlots.remove(time)
-                    : selectedSlots.add(time);
+                isSelected ? selectedSlots.remove(time) : selectedSlots.add(time);
               });
             }
           : null,
@@ -92,23 +86,17 @@ class _DoctorAppointmentsState extends State<DoctorAppointments> {
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: !isAvailable
-              ? Colors
-                    .grey
-                    .shade400 // booked
+              ? Colors.grey.shade400
               : isSelected
-              ? const Color.fromARGB(255, 123, 194, 123)
-              : Colors.white,
+                  ? const Color.fromARGB(255, 123, 194, 123)
+                  : Colors.white,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Text(
           time,
           style: TextStyle(
             fontWeight: FontWeight.w600,
-            color: !isAvailable
-                ? Colors.grey.shade700
-                : isSelected
-                ? Colors.white
-                : Colors.black,
+            color: !isAvailable ? Colors.grey.shade700 : (isSelected ? Colors.white : Colors.black),
           ),
         ),
       ),
@@ -126,9 +114,7 @@ class _DoctorAppointmentsState extends State<DoctorAppointments> {
           onPressed: () {
             Navigator.pushReplacement(
               context,
-              MaterialPageRoute(
-                builder: (_) => DoctorDashboard(doctorId: widget.doctorId),
-              ),
+              MaterialPageRoute(builder: (_) => DoctorDashboard(doctorId: widget.doctorId)),
             );
           },
         ),
@@ -140,13 +126,10 @@ class _DoctorAppointmentsState extends State<DoctorAppointments> {
             firstDate: DateTime.now(),
             lastDate: DateTime(2030),
             onDateChanged: (date) {
-              setState(() {
-                selectedDate = date;
-                _loadAvailability(date);
-              });
+              setState(() => selectedDate = date);
+              _loadAvailability(date);
             },
           ),
-
           Expanded(
             child: Container(
               color: const Color.fromARGB(255, 242, 244, 245),
@@ -157,10 +140,7 @@ class _DoctorAppointmentsState extends State<DoctorAppointments> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const SizedBox(height: 16),
-                      Text(
-                        section.key,
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
+                      Text(section.key, style: const TextStyle(fontWeight: FontWeight.bold)),
                       const SizedBox(height: 10),
                       GridView.count(
                         crossAxisCount: 3,
@@ -177,25 +157,21 @@ class _DoctorAppointmentsState extends State<DoctorAppointments> {
               ),
             ),
           ),
-
           Padding(
             padding: const EdgeInsets.all(16),
             child: SizedBox(
               width: double.infinity,
               height: 50,
               child: ElevatedButton(
-                onPressed: () {
+                onPressed: () async {
                   setState(() {
-                    availableSlots = Set.from(selectedSlots); 
+                    availableSlots = Set.from(selectedSlots);
                     selectedSlots.clear();
                   });
 
-                  SlotsDataService.saveAvailability(
-                    widget.doctorId,
-                    selectedDate,
-                    availableSlots,
-                  );
+                  await SlotsDataService.saveAvailability(widget.doctorId, selectedDate, availableSlots);
 
+                  if (!mounted) return;
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                       content: Text("Availability saved"),
@@ -203,7 +179,6 @@ class _DoctorAppointmentsState extends State<DoctorAppointments> {
                     ),
                   );
                 },
-
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color.fromARGB(255, 44, 56, 56),
                   foregroundColor: Colors.white,
@@ -214,7 +189,6 @@ class _DoctorAppointmentsState extends State<DoctorAppointments> {
           ),
         ],
       ),
-
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: 2,
         selectedItemColor: const Color.fromARGB(255, 44, 56, 56),
@@ -223,27 +197,20 @@ class _DoctorAppointmentsState extends State<DoctorAppointments> {
           if (index == 0) {
             Navigator.pushReplacement(
               context,
-              MaterialPageRoute(
-                builder: (_) => DoctorDashboard(doctorId: widget.doctorId),
-              ),
+              MaterialPageRoute(builder: (_) => DoctorDashboard(doctorId: widget.doctorId)),
             );
           }
           if (index == 1) {
             Navigator.pushReplacement(
               context,
-              MaterialPageRoute(
-                builder: (_) => PatientsPage(doctorId: widget.doctorId),
-              ),
+              MaterialPageRoute(builder: (_) => PatientsPage(doctorId: widget.doctorId)),
             );
           }
         },
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: "DASH"),
           BottomNavigationBarItem(icon: Icon(Icons.people), label: "PATIENTS"),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.event),
-            label: "APPOINTMENTS",
-          ),
+          BottomNavigationBarItem(icon: Icon(Icons.event), label: "APPOINTMENTS"),
         ],
       ),
     );

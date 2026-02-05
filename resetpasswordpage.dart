@@ -15,7 +15,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
   bool showPassword = false;
   String message = "";
 
-  void resetPassword() {
+  Future<void> resetPassword() async {
     String email = emailCtrl.text.trim();
     String password = passCtrl.text;
 
@@ -34,11 +34,15 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
       return;
     }
 
-    bool success =
-        UserDataService.resetPatientPassword(email, password);
+    bool success = false;
+    try {
+      success = await UserDataService.resetPatientPassword(email, password);
+    } catch (_) {
+      success = false;
+    }
 
     if (!success) {
-      setState(() => message = "Account not found");
+      setState(() => message = "Failed to send reset email");
       return;
     }
 
