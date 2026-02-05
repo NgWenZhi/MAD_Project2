@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'userdataservice.dart';
 import 'doctorportal.dart';
+import 'user.dart';
 
 class DoctorLoginPage extends StatefulWidget {
   const DoctorLoginPage({super.key});
@@ -15,18 +16,29 @@ class _DoctorLoginPageState extends State<DoctorLoginPage> {
   bool showPassword = false;
   String error = "";
 
-  void login() {
-    var doctor = UserDataService.loginDoctor(idCtrl.text, passCtrl.text);
+  Future<void> login() async {
+    AppUser? doctor;
+    try {
+      doctor = await UserDataService.loginDoctor(idCtrl.text.trim(), passCtrl.text);
+    } catch (_) {
+      doctor = null;
+    }
 
     if (doctor == null) {
       setState(() => error = "Invalid ID/password");
       return;
     }
 
+    final doctorId = doctor.doctorId;
+    if (doctorId == null || doctorId.isEmpty) {
+      setState(() => error = "Doctor profile missing doctorId");
+      return;
+    }
+
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(
-        builder: (context) => DoctorDashboard(doctorId: doctor.doctorId!),
+        builder: (context) => DoctorDashboard(doctorId: doctorId),
       ),
     );
 
@@ -41,9 +53,9 @@ class _DoctorLoginPageState extends State<DoctorLoginPage> {
     return Scaffold(
       backgroundColor: const Color.fromARGB(255, 242, 244, 245),
       appBar: AppBar(
-        centerTitle: true, 
+        centerTitle: true,
         backgroundColor: const Color.fromARGB(255, 242, 244, 245),
-        title: Text("MedihBook", 
+        title: Text("MedihBook",
         style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),)),
       body: SingleChildScrollView(
         child: Padding(

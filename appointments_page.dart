@@ -14,24 +14,14 @@ class AppointmentsPage extends StatefulWidget {
 }
 
 class _AppointmentsPageState extends State<AppointmentsPage> {
-  int tabIndex = 0; // 0 = upcoming          1 = past
+  int tabIndex = 0;
 
   DateTime get _now => DateTime.now();
 
-  bool _isPast(Appointment a) {
-    return a.dateTime.isBefore(_now);
-  }
+  bool _isPast(Appointment a) => a.dateTime.isBefore(_now);
 
   @override
   Widget build(BuildContext context) {
-    final all = AppointmentsDataService.all;
-
-    final filtered = all.where((a) {
-      if (a.patientName != widget.patientName) return false;
-      return tabIndex == 0 ? !_isPast(a) : _isPast(a);
-    }).toList()
-      ..sort((a, b) => a.dateTime.compareTo(b.dateTime));
-
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -44,7 +34,6 @@ class _AppointmentsPageState extends State<AppointmentsPage> {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            // tab
             Row(
               children: [
                 _tabButton("Upcoming", 0),
@@ -52,13 +41,22 @@ class _AppointmentsPageState extends State<AppointmentsPage> {
                 _tabButton("Past", 1),
               ],
             ),
-
             const SizedBox(height: 16),
-
-            // list
             Expanded(
-              child: filtered.isEmpty
-                  ? const Center(
+              child: FutureBuilder<List<Appointment>>(
+                future: AppointmentsDataService.forPatient(widget.patientName),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+
+                  final filtered = snapshot.data!.where((a) {
+                    return tabIndex == 0 ? !_isPast(a) : _isPast(a);
+                  }).toList()
+                    ..sort((a, b) => a.dateTime.compareTo(b.dateTime));
+
+                  if (filtered.isEmpty) {
+                    return const Center(
                       child: Text(
                         "No appointments found",
                         style: TextStyle(
@@ -66,38 +64,26 @@ class _AppointmentsPageState extends State<AppointmentsPage> {
                           fontWeight: FontWeight.w600,
                         ),
                       ),
-                    )
-                  : ListView.separated(
-                      itemCount: filtered.length,
-                      separatorBuilder: (_, __) =>
-                          const SizedBox(height: 14),
-                      itemBuilder: (_, i) {
-                        final a = filtered[i];
-                        return _AppointmentCard(
-                          appointment: a,
-                          isPast: _isPast(a),
-                          onCancel: () {
-                            setState(() {
-                              AppointmentsDataService.remove(a);
-                            });
-                          },
-                          onComplete: () {
-                            setState(() {
-                              AppointmentsDataService.remove(a);
-                              AppointmentsDataService.add(
-                                Appointment(
-                                  doctorId: a.doctorId,
-                                  patientName: a.patientName,
-                                  dateTime: a.dateTime.subtract(
-                                    const Duration(days: 3650),
-                                  ), // mark as past
-                                ),
-                              );
-                            });
-                          },
-                        );
-                      },
-                    ),
+                    );
+                  }
+
+                  return ListView.separated(
+                    itemCount: filtered.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 14),
+                    itemBuilder: (_, i) {
+                      final a = filtered[i];
+                      return _AppointmentCard(
+                        appointment: a,
+                        isPast: _isPast(a),
+                        onCancel: () async {
+                          await AppointmentsDataService.remove(a);
+                          if (mounted) setState(() {});
+                        },
+                      );
+                    },
+                  );
+                },
+              ),
             ),
           ],
         ),
@@ -132,18 +118,15 @@ class _AppointmentsPageState extends State<AppointmentsPage> {
   }
 }
 
-
 class _AppointmentCard extends StatelessWidget {
   final Appointment appointment;
   final bool isPast;
-  final VoidCallback onCancel;
-  final VoidCallback onComplete;
+  final Future<void> Function() onCancel;
 
   const _AppointmentCard({
     required this.appointment,
     required this.isPast,
     required this.onCancel,
-    required this.onComplete,
   });
 
   String _fmt(DateTime d) {
@@ -165,58 +148,35 @@ class _AppointmentCard extends StatelessWidget {
         children: [
           Text(
             "Doctor ID: ${appointment.doctorId}",
-            style: const TextStyle(
-              fontWeight: FontWeight.w800,
-              fontSize: 16,
-            ),
+            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
           ),
           const SizedBox(height: 6),
           Text(
             _fmt(appointment.dateTime),
-            style: const TextStyle(
-              color: Colors.black54,
-              fontWeight: FontWeight.w600,
-            ),
+            style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 14),
-
           if (!isPast)
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: onCancel,
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.red,
-                      side: const BorderSide(color: Colors.red),
-                    ),
-                    child: const Text("Cancel"),
-                  ),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: () {
+                  onCancel();
+                },
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.red,
+                  side: const BorderSide(color: Colors.red),
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: onComplete,
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.green,
-                      side: const BorderSide(color: Colors.green),
-                    ),
-                    child: const Text("Completed"),
-                  ),
-                ),
-              ],
+                child: const Text("Cancel"),
+              ),
             )
           else
             const Text(
               "Completed",
-              style: TextStyle(
-                fontWeight: FontWeight.w700,
-                color: Colors.grey,
-              ),
+              style: TextStyle(fontWeight: FontWeight.w700, color: Colors.grey),
             ),
         ],
       ),
     );
   }
 }
-

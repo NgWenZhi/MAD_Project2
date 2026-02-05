@@ -14,33 +14,17 @@ class ScheduleAppointmentPage extends StatefulWidget {
   const ScheduleAppointmentPage({super.key, required this.user});
 
   @override
-  State<ScheduleAppointmentPage> createState() =>
-      _ScheduleAppointmentPageState();
+  State<ScheduleAppointmentPage> createState() => _ScheduleAppointmentPageState();
 }
 
 class _ScheduleAppointmentPageState extends State<ScheduleAppointmentPage> {
   String _query = "";
   DateTime selectedDate = DateTime.now();
   int currentIndex = 1;
-
-  // doctorId -> selected slot index
   final Map<String, int> _selectedSlotIndex = {};
 
   String _formatDate(DateTime date) {
-    const months = [
-      "JAN",
-      "FEB",
-      "MAR",
-      "APR",
-      "MAY",
-      "JUN",
-      "JUL",
-      "AUG",
-      "SEP",
-      "OCT",
-      "NOV",
-      "DEC",
-    ];
+    const months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
     return "${months[date.month - 1]} ${date.day}, ${date.year}";
   }
 
@@ -59,11 +43,6 @@ class _ScheduleAppointmentPageState extends State<ScheduleAppointmentPage> {
 
   @override
   Widget build(BuildContext context) {
-    final doctors = UserDataService.doctors.where((d) {
-      if (_query.trim().isEmpty) return true;
-      return d.name.toLowerCase().contains(_query.toLowerCase());
-    }).toList();
-
     return Scaffold(
       backgroundColor: const Color(0xFFF6F7FB),
       body: SafeArea(
@@ -72,7 +51,6 @@ class _ScheduleAppointmentPageState extends State<ScheduleAppointmentPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header
               Row(
                 children: [
                   IconButton(
@@ -86,15 +64,9 @@ class _ScheduleAppointmentPageState extends State<ScheduleAppointmentPage> {
                   ),
                 ],
               ),
-
               const SizedBox(height: 12),
-
-              // Search
               Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
                 child: TextField(
                   onChanged: (v) => setState(() => _query = v),
                   decoration: const InputDecoration(
@@ -105,15 +77,9 @@ class _ScheduleAppointmentPageState extends State<ScheduleAppointmentPage> {
                   ),
                 ),
               ),
-
               const SizedBox(height: 12),
-
-              // Date picker
               Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                ),
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
                 child: CalendarDatePicker(
                   initialDate: selectedDate,
                   firstDate: DateTime.now(),
@@ -126,84 +92,90 @@ class _ScheduleAppointmentPageState extends State<ScheduleAppointmentPage> {
                   },
                 ),
               ),
-
               const SizedBox(height: 12),
-
               Expanded(
-                child: ListView.builder(
-                  itemCount: doctors.length,
-                  itemBuilder: (_, i) {
-                    final doctor = doctors[i];
-                    final slotsSet = SlotsDataService.getAvailability(
-                      doctor.doctorId!,
-                      selectedDate,
-                    );
+                child: FutureBuilder<List<AppUser>>(
+                  future: UserDataService.doctors,
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
 
-                    if (slotsSet.isEmpty) return const SizedBox();
+                    final doctors = snapshot.data!.where((d) {
+                      if (_query.trim().isEmpty) return true;
+                      return d.name.toLowerCase().contains(_query.toLowerCase());
+                    }).toList();
 
-                    final slots = slotsSet.toList();
-                    final selectedIdx = _selectedSlotIndex[doctor.doctorId];
+                    return ListView.builder(
+                      itemCount: doctors.length,
+                      itemBuilder: (_, i) {
+                        final doctor = doctors[i];
+                        final doctorId = doctor.doctorId;
+                        if (doctorId == null || doctorId.isEmpty) {
+                          return const SizedBox();
+                        }
 
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 16),
-                      child: _DoctorCard(
-                        name: doctor.name,
-                        initials: doctor.name
-                            .split(" ")
-                            .map((e) => e[0])
-                            .take(2)
-                            .join()
-                            .toUpperCase(),
-                        dateLabel: _formatDate(selectedDate),
-                        slots: slots,
-                        selectedSlotIndex: selectedIdx,
-                        onSlotTap: (idx) {
-                          setState(() {
-                            final id = doctor.doctorId!;
-                            if (_selectedSlotIndex[id] == idx) {
-                              _selectedSlotIndex.remove(id);
-                            } else {
-                              _selectedSlotIndex.clear();
-                              _selectedSlotIndex[id] = idx;
-                            }
-                          });
-                        },
-                        onConfirm: selectedIdx == null
-                            ? null
-                            : () {
-                                final time = slots[selectedIdx];
+                        return FutureBuilder<Set<String>>(
+                          future: SlotsDataService.getAvailability(doctorId, selectedDate),
+                          builder: (context, slotSnap) {
+                            final slotsSet = slotSnap.data ?? {};
+                            if (slotsSet.isEmpty) return const SizedBox();
 
-                                AppointmentsDataService.add(
-                                  Appointment(
-                                    doctorId: doctor.doctorId!,
-                                    patientName: widget.user.name,
-                                    dateTime: _combineDateAndTime(
-                                      selectedDate,
-                                      time,
-                                    ),
-                                  ),
-                                );
+                            final slots = slotsSet.toList();
+                            final selectedIdx = _selectedSlotIndex[doctorId];
 
-                                slotsSet.remove(time);
-                                SlotsDataService.saveAvailability(
-                                  doctor.doctorId!,
-                                  selectedDate,
-                                  slotsSet,
-                                );
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 16),
+                              child: _DoctorCard(
+                                name: doctor.name,
+                                initials: doctor.name.split(" ").map((e) => e[0]).take(2).join().toUpperCase(),
+                                dateLabel: _formatDate(selectedDate),
+                                slots: slots,
+                                selectedSlotIndex: selectedIdx,
+                                onSlotTap: (idx) {
+                                  setState(() {
+                                    if (_selectedSlotIndex[doctorId] == idx) {
+                                      _selectedSlotIndex.remove(doctorId);
+                                    } else {
+                                      _selectedSlotIndex.clear();
+                                      _selectedSlotIndex[doctorId] = idx;
+                                    }
+                                  });
+                                },
+                                onConfirm: selectedIdx == null
+                                    ? null
+                                    : () async {
+                                        final time = slots[selectedIdx];
+                                        await AppointmentsDataService.add(
+                                          Appointment(
+                                            doctorId: doctorId,
+                                            patientName: widget.user.name,
+                                            patientUid: widget.user.uid,
+                                            dateTime: _combineDateAndTime(selectedDate, time),
+                                          ),
+                                        );
 
-                                setState(() {
-                                  _selectedSlotIndex.clear();
-                                });
+                                        slotsSet.remove(time);
+                                        await SlotsDataService.saveAvailability(doctorId, selectedDate, slotsSet);
 
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      "Booked ${doctor.name} • ${_formatDate(selectedDate)} • $time",
-                                    ),
-                                  ),
-                                );
-                              },
-                      ),
+                                        if (!mounted) return;
+                                        setState(() {
+                                          _selectedSlotIndex.clear();
+                                        });
+
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text(
+                                              "Booked ${doctor.name} • ${_formatDate(selectedDate)} • $time",
+                                            ),
+                                          ),
+                                        );
+                                      },
+                              ),
+                            );
+                          },
+                        );
+                      },
                     );
                   },
                 ),
@@ -212,8 +184,6 @@ class _ScheduleAppointmentPageState extends State<ScheduleAppointmentPage> {
           ),
         ),
       ),
-
-      // ✅ Bottom navigation FIXED
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: currentIndex,
         selectedItemColor: Colors.black,
@@ -224,47 +194,22 @@ class _ScheduleAppointmentPageState extends State<ScheduleAppointmentPage> {
           setState(() => currentIndex = index);
 
           if (index == 0) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => PatientDashboard(user: widget.user),
-              ),
-            );
+            Navigator.push(context, MaterialPageRoute(builder: (_) => PatientDashboard(user: widget.user)));
           }
 
           if (index == 2) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => HealthSummaryPage(user: widget.user),
-              ),
-            );
+            Navigator.push(context, MaterialPageRoute(builder: (_) => HealthSummaryPage(user: widget.user)));
           }
 
           if (index == 3) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => ProfilePage(user: widget.user)),
-            );
+            Navigator.push(context, MaterialPageRoute(builder: (_) => ProfilePage(user: widget.user)));
           }
         },
         items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home_rounded),
-            label: "Home",
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.event_note_rounded),
-            label: "Appointments",
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.folder_copy_outlined),
-            label: "Records",
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person_rounded),
-            label: "Profile",
-          ),
+          BottomNavigationBarItem(icon: Icon(Icons.home_rounded), label: "Home"),
+          BottomNavigationBarItem(icon: Icon(Icons.event_note_rounded), label: "Appointments"),
+          BottomNavigationBarItem(icon: Icon(Icons.folder_copy_outlined), label: "Records"),
+          BottomNavigationBarItem(icon: Icon(Icons.person_rounded), label: "Profile"),
         ],
       ),
     );
@@ -295,53 +240,27 @@ class _DoctorCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-      ),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Doctor header
           Row(
             children: [
               CircleAvatar(
                 radius: 24,
                 backgroundColor: Colors.grey.shade200,
-                child: Text(
-                  initials,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black,
-                  ),
-                ),
+                child: Text(initials, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black)),
               ),
               const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  name,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
+              Expanded(child: Text(name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800))),
             ],
           ),
-
           const SizedBox(height: 10),
-
           Text(
             "AVAILABILITY · $dateLabel",
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w800,
-              color: Colors.grey.shade600,
-            ),
+            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Colors.grey.shade600),
           ),
-
           const SizedBox(height: 8),
-
           SizedBox(
             height: 76,
             child: ScrollConfiguration(
@@ -357,48 +276,20 @@ class _DoctorCard extends StatelessWidget {
                 child: Row(
                   children: List.generate(slots.length, (i) {
                     final bool isSelected = selectedSlotIndex == i;
-
-                    return Padding(
-                      padding: const EdgeInsets.only(right: 10),
-                      child: InkWell(
-                        onTap: () => onSlotTap(i),
-                        borderRadius: BorderRadius.circular(12),
-                        child: Container(
-                          width: 110,
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: isSelected
-                                ? Colors.teal
-                                : const Color(0xFFF3F5F9),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                dateLabel,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w800,
-                                  color: isSelected
-                                      ? Colors.white
-                                      : Colors.black87,
-                                ),
-                              ),
-                              const Spacer(),
-                              Text(
-                                slots[i],
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w800,
-                                  color: isSelected
-                                      ? Colors.white
-                                      : Colors.black87,
-                                ),
-                              ),
-                            ],
+                    return GestureDetector(
+                      onTap: () => onSlotTap(i),
+                      child: Container(
+                        margin: EdgeInsets.only(right: i == slots.length - 1 ? 0 : 8),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: isSelected ? Colors.black : const Color(0xFFF1F2F6),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          slots[i],
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: isSelected ? Colors.white : Colors.black87,
                           ),
                         ),
                       ),
@@ -408,27 +299,17 @@ class _DoctorCard extends StatelessWidget {
               ),
             ),
           ),
-
-          const SizedBox(height: 14),
-
+          const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,
-            height: 48,
             child: ElevatedButton(
               onPressed: onConfirm,
               style: ElevatedButton.styleFrom(
-                backgroundColor: onConfirm == null
-                    ? Colors.grey.shade400
-                    : Colors.teal,
+                backgroundColor: Colors.black,
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
-              child: const Text(
-                "Confirm Appointment",
-                style: TextStyle(fontWeight: FontWeight.w800),
-              ),
+              child: const Text("Confirm Booking"),
             ),
           ),
         ],
